@@ -6,7 +6,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/kamva/mgm/v3"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -43,6 +45,20 @@ func HarshPassword(password string) (string, error) {
 	}
 	return string(bytes), nil
 }
+func UserExists(email string) bool {
+	var result User
+	err := mgm.Coll(&User{}).First(bson.M{"email": email}, &result)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false
+		}
+		fmt.Println("DB Error:", err.Error())
+		return false
+	}
+
+	return true
+}
 func CheckUserdata() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		ValidateUsers := User{}
@@ -68,7 +84,6 @@ func CheckProductsData() fiber.Handler {
 				"success": false,
 				"error":   err.Error(),
 			})
-
 		}
 
 		if ValidateProducts.Price < 0 {
@@ -123,7 +138,7 @@ func main() {
 				"error":   "Error parsing request body" + err.Error(),
 			})
 		}
-		//Harshing the userPass before Saving it to Database
+
 		hashedPassword, err := HarshPassword(NewUser.Password)
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{
@@ -133,8 +148,20 @@ func main() {
 		}
 
 		NewUser.Password = hashedPassword
+		if UserExists(NewUser.Email) {
+			return c.Status(400).JSON(fiber.Map{
+				"success": false,
+				"error":   "User already exists",
+			})
 
+		}
 		mgm.Coll(NewUser).Create(NewUser)
+
+		if UserExists(NewUser.Email) {
+
+		}
+		// Otherwise, proceed to hash password and save...
+
 		return c.Status(200).JSON(fiber.Map{
 			"success": true,
 			"data":    "user User Registered" + NewUser.Name,
